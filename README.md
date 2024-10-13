@@ -89,10 +89,11 @@ The Phonebook Application is a robust desktop application built in Java using th
 
 ## Efficiency Analysis
 
-The search functionality utilizes a linear search algorithm, which checks each contact one by one. While this method is straightforward, it becomes less efficient as the number of contacts grows. For contact lists exceeding a few hundred entries, consider implementing a more advanced search algorithm like binary search or using a hash table for constant time complexity.
+The search functionality utilizes a linear search algorithm, which checks each contact one by one. While this method is straightforward, it becomes less efficient as the number of contacts grows. For contact lists exceeding a few hundred entries, the implementation of a hash table for storing contacts is recommended.
 
-In practical terms, the current design is effective for a maximum of 2000 contacts, ensuring that the application remains responsive and user-friendly.
+A hash table can provide average-case constant time complexity O(1) for search operations, significantly improving performance for larger datasets. In practical terms, this approach allows for faster retrieval and management of contacts, enhancing the application's responsiveness.
 
+In the current design, the application remains effective for a maximum of 2000 contacts while ensuring that the user experience is smooth and efficient.
 ## Contributors
 
 - Your Name

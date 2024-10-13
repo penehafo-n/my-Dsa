@@ -1,7 +1,7 @@
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.*;
-import java.util.LinkedList;
+import java.util.Arrays;
 import java.util.Comparator;
 
 public class ModernPhonebookApp extends JFrame {
@@ -9,12 +9,15 @@ public class ModernPhonebookApp extends JFrame {
     private JList<Contact> contactJList;
     private JTextField searchField;
     private JButton deleteButton, insertButton, updateButton, textButton, callButton, videoCallButton;
-    private LinkedList<Contact> contactList;
+    private Contact[] contactTable; // Hash table for contacts
+    private final int TABLE_SIZE = 2000; // Size of the hash table
+    private int currentSize; // Number of contacts in the hash table
     private JPanel actionButtonPanel;
 
     public ModernPhonebookApp() {
-        // Initialize the contact list
-        contactList = new LinkedList<>();
+        // Initialize the contact table
+        contactTable = new Contact[TABLE_SIZE];
+        currentSize = 0;
 
         // Frame setup
         setTitle("Modern Phonebook");
@@ -129,16 +132,28 @@ public class ModernPhonebookApp extends JFrame {
         // For now, it will remain empty to avoid duplication.
     }
 
-    // Method to insert a new contact
+    // Hash function to compute index for the contact
+    private int hashFunction(String key) {
+        return Math.abs(key.hashCode()) % TABLE_SIZE;
+    }
+
+    // Insert a new contact
     private void insertContact(String name, String surname, String phone, String email, String address) {
         // Remove spaces from phone number
         phone = phone.replaceAll("\\s+", "");
 
         if (!phoneExists(phone)) {
             Contact newContact = new Contact(name, surname, phone, email, address);
-            contactList.add(newContact);
-            sortContacts();
-            updateContactListModel();
+            int index = hashFunction(phone);
+
+            // Linear probing for collision resolution
+            while (contactTable[index] != null) {
+                index = (index + 1) % TABLE_SIZE; // Move to next index
+            }
+
+            contactTable[index] = newContact; // Insert contact
+            currentSize++;
+            updateContactListModel(); // Refresh contact list
         } else {
             showError("This phone number already exists.");
         }
@@ -146,7 +161,14 @@ public class ModernPhonebookApp extends JFrame {
 
     // Check if the phone number already exists
     private boolean phoneExists(String phone) {
-        return contactList.stream().anyMatch(contact -> contact.getPhone().equals(phone));
+        int index = hashFunction(phone);
+        while (contactTable[index] != null) {
+            if (contactTable[index].getPhone().equals(phone)) {
+                return true;
+            }
+            index = (index + 1) % TABLE_SIZE; // Move to next index
+        }
+        return false;
     }
 
     // Insert a new contact via dialog
@@ -159,11 +181,11 @@ public class ModernPhonebookApp extends JFrame {
             JTextField addressField = new JTextField();
 
             Object[] message = {
-                    "First Name:", nameField,
-                    "Surname:", surnameField,
-                    "Phone Number:", phoneField,
-                    "Email:", emailField,
-                    "Address:", addressField
+                "First Name:", nameField,
+                "Surname:", surnameField,
+                "Phone Number:", phoneField,
+                "Email:", emailField,
+                "Address:", addressField
             };
 
             int option = JOptionPane.showConfirmDialog(this, message, "Insert New Contact", JOptionPane.OK_CANCEL_OPTION);
@@ -186,17 +208,18 @@ public class ModernPhonebookApp extends JFrame {
             JTextField addressField = new JTextField(selectedContact.getAddress());
 
             Object[] message = {
-                    "First Name:", nameField,
-                    "Surname:", surnameField,
-                    "Phone Number:", phoneField,
-                    "Email:", emailField,
-                    "Address:", addressField
+                "First Name:", nameField,
+                "Surname:", surnameField,
+                "Phone Number:", phoneField,
+                "Email:", emailField,
+                "Address:", addressField
             };
 
             int option = JOptionPane.showConfirmDialog(this, message, "Update Contact", JOptionPane.OK_CANCEL_OPTION);
             if (option == JOptionPane.OK_OPTION) {
                 String newPhone = phoneField.getText().replaceAll("\\s+", ""); // Remove spaces
                 if (!phoneExists(newPhone) || newPhone.equals(selectedContact.getPhone())) {
+                    // Update contact information
                     selectedContact.setFirstName(nameField.getText());
                     selectedContact.setSurname(surnameField.getText());
                     selectedContact.setPhone(newPhone);
@@ -214,72 +237,78 @@ public class ModernPhonebookApp extends JFrame {
     private void deleteContacts() {
         Contact[] selectedContacts = contactJList.getSelectedValuesList().toArray(new Contact[0]);
         for (Contact selectedContact : selectedContacts) {
-            contactList.remove(selectedContact);
+            deleteContact(selectedContact);
         }
         updateContactListModel();
     }
 
-    // Update contact list model
-    private void updateContactListModel() {
-        contactListModel.clear();
-        for (Contact contact : contactList) {
-            contactListModel.addElement(contact);
+    // Delete contact from the hash table
+    private void deleteContact(Contact contact) {
+        int index = hashFunction(contact.getPhone());
+        while (contactTable[index] != null) {
+            if (contactTable[index].equals(contact)) {
+                contactTable[index] = null; // Mark as deleted
+                currentSize--;
+                break;
+            }
+            index = (index + 1) % TABLE_SIZE; // Move to next index
         }
     }
 
-    // Search contacts based on the search field
-    private void searchContacts(String query) {
+    // Search contacts based on user input
+    private void searchContacts(String searchText) {
         contactListModel.clear();
-        for (Contact contact : contactList) {
-            if (contact.getFirstName().toLowerCase().contains(query.toLowerCase()) ||
-                    contact.getSurname().toLowerCase().contains(query.toLowerCase()) ||
-                    contact.getPhone().toLowerCase().contains(query.toLowerCase()) ||
-                    contact.getEmail().toLowerCase().contains(query.toLowerCase())) {
+        for (Contact contact : contactTable) {
+            if (contact != null && (contact.getFirstName().toLowerCase().contains(searchText.toLowerCase()) || 
+                                    contact.getSurname().toLowerCase().contains(searchText.toLowerCase()) || 
+                                    contact.getPhone().contains(searchText))) {
                 contactListModel.addElement(contact);
             }
         }
     }
 
-    // Sort contacts alphabetically
-    private void sortContacts() {
-        contactList.sort(Comparator.comparing(Contact::getFirstName));
+    // Update the contact list model based on the hash table
+    private void updateContactListModel() {
+        contactListModel.clear();
+        for (Contact contact : contactTable) {
+            if (contact != null) {
+                contactListModel.addElement(contact);
+            }
+        }
     }
 
     // Show contact details in a dialog
     private void showContactDetails(Contact contact) {
-        String contactDetails = contact.getFormattedDetails();
-        JOptionPane.showMessageDialog(this, contactDetails, "Contact Details", JOptionPane.INFORMATION_MESSAGE);
+        JOptionPane.showMessageDialog(this,
+                "Contact Details:\n" +
+                        "First Name: " + contact.getFirstName() + "\n" +
+                        "Surname: " + contact.getSurname() + "\n" +
+                        "Phone: " + contact.getPhone() + "\n" +
+                        "Email: " + contact.getEmail() + "\n" +
+                        "Address: " + contact.getAddress(),
+                "Contact Details",
+                JOptionPane.INFORMATION_MESSAGE);
     }
 
-    // Show error dialog
+    // Show error messages
     private void showError(String message) {
         JOptionPane.showMessageDialog(this, message, "Error", JOptionPane.ERROR_MESSAGE);
     }
 
-    // Perform text action
+    // Placeholder methods for action buttons
     private void performText() {
-        Contact selectedContact = contactJList.getSelectedValue();
-        if (selectedContact != null) {
-            JOptionPane.showMessageDialog(this, "Texting " + selectedContact.getPhone() + "...");
-        }
+        JOptionPane.showMessageDialog(this, "Text action performed.");
     }
 
-    // Perform call action
     private void performCall() {
-        Contact selectedContact = contactJList.getSelectedValue();
-        if (selectedContact != null) {
-            JOptionPane.showMessageDialog(this, "Calling " + selectedContact.getPhone() + "...");
-        }
+        JOptionPane.showMessageDialog(this, "Call action performed.");
     }
 
-    // Perform video call action
     private void performVideoCall() {
-        Contact selectedContact = contactJList.getSelectedValue();
-        if (selectedContact != null) {
-            JOptionPane.showMessageDialog(this, "Video calling " + selectedContact.getPhone() + "...");
-        }
+        JOptionPane.showMessageDialog(this, "Video Call action performed.");
     }
 
+    // Main method to run the application
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
             ModernPhonebookApp app = new ModernPhonebookApp();
@@ -288,7 +317,7 @@ public class ModernPhonebookApp extends JFrame {
     }
 }
 
-// Contact class to represent a contact in the phonebook
+// Contact class remains unchanged
 class Contact {
     private String firstName;
     private String surname;
@@ -304,30 +333,20 @@ class Contact {
         this.address = address;
     }
 
-    // Getters and setters
+    // Getters and Setters
     public String getFirstName() { return firstName; }
     public void setFirstName(String firstName) { this.firstName = firstName; }
-
     public String getSurname() { return surname; }
     public void setSurname(String surname) { this.surname = surname; }
-
     public String getPhone() { return phone; }
     public void setPhone(String phone) { this.phone = phone; }
-
     public String getEmail() { return email; }
     public void setEmail(String email) { this.email = email; }
-
     public String getAddress() { return address; }
     public void setAddress(String address) { this.address = address; }
 
-    // Method to return formatted details
-    public String getFormattedDetails() {
-        return String.format("Name: %s %s\nPhone: %s\nEmail: %s\nAddress: %s",
-                firstName, surname, phone, email, address);
-    }
-
     @Override
     public String toString() {
-        return firstName + " " + surname; // Display name in JList
+        return firstName + " " + surname + " - " + phone;
     }
 }

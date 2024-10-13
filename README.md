@@ -1,4 +1,4 @@
-Here's the revised README file without bold text and with the sorting feature explicitly mentioned as part of the application:
+
 
 ---
 

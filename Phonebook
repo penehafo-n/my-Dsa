@@ -1,19 +1,16 @@
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.*;
-import java.util.*;
-import javax.swing.border.EmptyBorder;
+import java.util.LinkedList;
+import java.util.Comparator;
 
 public class ModernPhonebookApp extends JFrame {
     private DefaultListModel<Contact> contactListModel;
     private JList<Contact> contactJList;
     private JTextField searchField;
-    private JTextArea contactDetailsArea;
-    private JButton deleteButton, insertButton, updateButton;
+    private JButton deleteButton, insertButton, updateButton, textButton, callButton, videoCallButton;
     private LinkedList<Contact> contactList;
-
-    // Maximum number of contacts allowed
-    private static final int MAX_CONTACTS = 2000;
+    private JPanel actionButtonPanel;
 
     public ModernPhonebookApp() {
         // Initialize the contact list
@@ -24,10 +21,12 @@ public class ModernPhonebookApp extends JFrame {
         setSize(600, 500);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLayout(new BorderLayout());
+        getContentPane().setBackground(new Color(240, 240, 240)); // Light Gray
 
         // Search panel
         JPanel searchPanel = new JPanel(new BorderLayout());
-        searchPanel.setBorder(new EmptyBorder(10, 10, 10, 10));
+        searchPanel.setBackground(new Color(240, 240, 240)); // Light Gray
+        searchPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
         searchPanel.add(new JLabel("Search:"), BorderLayout.WEST);
         searchField = new JTextField();
         searchPanel.add(searchField, BorderLayout.CENTER);
@@ -36,35 +35,73 @@ public class ModernPhonebookApp extends JFrame {
         // Contact list model and list component
         contactListModel = new DefaultListModel<>();
         contactJList = new JList<>(contactListModel);
-        contactJList.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION); // Allow multiple selection
+        contactJList.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
+        contactJList.setBackground(Color.WHITE); // Soft White
+        contactJList.setForeground(new Color(51, 51, 51)); // Dark Gray
         JScrollPane listScrollPane = new JScrollPane(contactJList);
+        add(listScrollPane, BorderLayout.CENTER);
 
-        // Contact details area and buttons
-        contactDetailsArea = new JTextArea(10, 30);
-        contactDetailsArea.setEditable(false);
-        contactDetailsArea.setFont(new Font("Arial", Font.PLAIN, 14));
-        JScrollPane detailsScrollPane = new JScrollPane(contactDetailsArea);
-
+        // Action buttons panel
+        actionButtonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         deleteButton = new JButton("Delete");
         deleteButton.setEnabled(false);
-        deleteButton.setBackground(Color.RED);
+        deleteButton.setBackground(new Color(244, 67, 54)); // Bright Red
         deleteButton.setForeground(Color.WHITE);
+        actionButtonPanel.add(deleteButton);
 
         insertButton = new JButton("Insert");
+        insertButton.setBackground(new Color(0, 86, 179)); // Deep Blue
+        insertButton.setForeground(Color.WHITE);
+        actionButtonPanel.add(insertButton);
+
         updateButton = new JButton("Update");
         updateButton.setEnabled(false); // Disable update button when no contact is selected
+        updateButton.setBackground(new Color(0, 86, 179)); // Deep Blue
+        updateButton.setForeground(Color.WHITE);
+        actionButtonPanel.add(updateButton);
+
+        // Initialize action buttons but don't add them to the panel yet
+        textButton = new JButton("Text");
+        textButton.setEnabled(false);
+        textButton.setBackground(new Color(0, 128, 0)); // Green
+        textButton.setForeground(Color.WHITE);
+        actionButtonPanel.add(textButton);
+
+        callButton = new JButton("Call");
+        callButton.setEnabled(false);
+        callButton.setBackground(new Color(0, 128, 255)); // Light Blue
+        callButton.setForeground(Color.WHITE);
+        actionButtonPanel.add(callButton);
+
+        videoCallButton = new JButton("Video Call");
+        videoCallButton.setEnabled(false);
+        videoCallButton.setBackground(new Color(255, 165, 0)); // Orange
+        videoCallButton.setForeground(Color.WHITE);
+        actionButtonPanel.add(videoCallButton);
+
+        // Add actionButtonPanel to the bottom of the frame
+        add(actionButtonPanel, BorderLayout.SOUTH);
 
         // Event listeners
         contactJList.addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting()) {
                 Contact selectedContact = contactJList.getSelectedValue();
-                if (selectedContact != null) {
-                    contactDetailsArea.setText(selectedContact.getFormattedDetails());
-                    deleteButton.setEnabled(true);
-                    updateButton.setEnabled(true);
-                } else {
-                    deleteButton.setEnabled(false);
-                    updateButton.setEnabled(false);
+                boolean isSelected = selectedContact != null;
+                deleteButton.setEnabled(isSelected);
+                updateButton.setEnabled(isSelected);
+                textButton.setEnabled(isSelected);
+                callButton.setEnabled(isSelected);
+                videoCallButton.setEnabled(isSelected);
+            }
+        });
+
+        contactJList.addMouseListener(new MouseAdapter() {
+            public void mouseClicked(MouseEvent e) {
+                if (e.getClickCount() == 2) {
+                    Contact selectedContact = contactJList.getSelectedValue();
+                    if (selectedContact != null) {
+                        showContactDetails(selectedContact);
+                    }
                 }
             }
         });
@@ -75,153 +112,114 @@ public class ModernPhonebookApp extends JFrame {
             }
         });
 
-        deleteButton.addActionListener(e -> deleteSelectedContacts());
-        insertButton.addActionListener(e -> openInsertContactDialog());
-        updateButton.addActionListener(e -> updateSelectedContact());
+        deleteButton.addActionListener(e -> deleteContacts());
+        insertButton.addActionListener(e -> insertNewContact());
+        updateButton.addActionListener(e -> updateSelectedContacts());
+        textButton.addActionListener(e -> performText());
+        callButton.addActionListener(e -> performCall());
+        videoCallButton.addActionListener(e -> performVideoCall());
 
-        // Layout adjustments
-        JPanel rightPanel = new JPanel(new BorderLayout());
-        rightPanel.add(detailsScrollPane, BorderLayout.CENTER);
-
-        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-        buttonPanel.add(insertButton);
-        buttonPanel.add(updateButton);
-        buttonPanel.add(deleteButton);
-        rightPanel.add(buttonPanel, BorderLayout.SOUTH);
-
-        add(listScrollPane, BorderLayout.CENTER);
-        add(rightPanel, BorderLayout.EAST);
-
-        // Populate with random contacts (now starting with 30 contacts)
-        populateRandomContacts(30);
+        // Load contacts from a data source to avoid duplicates on each run
+        loadContacts();
     }
 
-    // Method to open a dialog for inserting a new contact
-    private void openInsertContactDialog() {
-        JDialog dialog = new JDialog(this, "Insert New Contact", true);
-        dialog.setLayout(new GridLayout(4, 2));
-        dialog.setSize(300, 200);
-        dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
-
-        // Create input fields for new contact
-        JTextField nameField = new JTextField();
-        JTextField surnameField = new JTextField();
-        JTextField phoneField = new JTextField();
-
-        // Add labels and fields to the dialog
-        dialog.add(new JLabel("First Name:"));
-        dialog.add(nameField);
-        dialog.add(new JLabel("Surname:"));
-        dialog.add(surnameField);
-        dialog.add(new JLabel("Phone:"));
-        dialog.add(phoneField);
-
-        JButton saveButton = new JButton("Save");
-        saveButton.addActionListener(e -> {
-            String name = nameField.getText().trim();
-            String surname = surnameField.getText().trim();
-            String phone = phoneField.getText().trim();
-
-            insertContact(name, surname, phone); // Insert the contact
-            dialog.dispose(); // Close the dialog
-        });
-
-        dialog.add(saveButton);
-        dialog.setVisible(true);
+    // Load contacts to avoid duplication
+    private void loadContacts() {
+        // You can implement loading logic from a file or database here.
+        // For now, it will remain empty to avoid duplication.
     }
 
-    // Method to populate the list with random Namibian contacts
-    private void populateRandomContacts(int count) {
-        String[] firstNames = {
-                "Etuwete", "Shaun", "Collen", "Juice", "Elsa", "Sergio", "Anna", "Martha", "Samuel",
-                "Johannes", "Lukas", "Maria", "Katja", "Stefanus", "Petrus", "Selma", "Hendrick", "Elena",
-                "Abel", "Josef", "Michael", "Paulus", "Erika", "David", "Elina", "Thomas", "Wilhelm"
-        };
+    // Method to insert a new contact
+    private void insertContact(String name, String surname, String phone, String email, String address) {
+        // Remove spaces from phone number
+        phone = phone.replaceAll("\\s+", "");
 
-        String[] lastNames = {
-                "Amadhila", "Moses", "Shikongo", "Amunyela", "Haitembu", "Ngatangue", "Uugwanga", "Kandjimi",
-                "Nekongo", "Haidula", "Iiyambo", "Nghidinwa", "Nandago", "Angula", "Shiimi", "Ndapuka",
-                "Mweshipange", "Shipanga", "Shilongo", "Shikongo", "Muinjo", "Amunjela", "Nambala"
-        };
-
-        // Generate the specified number of random contacts
-        for (int i = 0; i < count && contactList.size() < MAX_CONTACTS; i++) {
-            String name = firstNames[new Random().nextInt(firstNames.length)];
-            String surname = lastNames[new Random().nextInt(lastNames.length)];
-            String randomPhone = generateNamibianPhoneNumber();
-            insertContact(name, surname, randomPhone);
-        }
-    }
-
-    // Method to generate a random Namibian phone number
-    private String generateNamibianPhoneNumber() {
-        String[] prefixes = {"081", "085", "061"};
-        String prefix = prefixes[new Random().nextInt(prefixes.length)];
-        int randomNumber = 1000000 + new Random().nextInt(9000000); // Generate a 7-digit number
-        return "+264 " + prefix + " " + randomNumber;
-    }
-
-    // Insert contact method with duplication check
-    private void insertContact(String name, String surname, String phone) {
-        if (contactList.size() < MAX_CONTACTS) {
-            if (!name.isEmpty() && !surname.isEmpty() && !phone.isEmpty()) {
-                // Check for duplication
-                boolean exists = contactList.stream().anyMatch(contact -> contact.getPhone().equals(phone));
-                if (!exists) {
-                    Contact newContact = new Contact(name, surname, phone);
-                    contactList.add(newContact);
-                    sortContacts();
-                    updateContactListModel();
-                } else {
-                    JOptionPane.showMessageDialog(this, "Contact with this phone number already exists.", "Error", JOptionPane.ERROR_MESSAGE);
-                }
-            }
-        } else {
-            JOptionPane.showMessageDialog(this, "Maximum contact limit reached.", "Error", JOptionPane.ERROR_MESSAGE);
-        }
-    }
-
-    // Delete selected contacts method
-    private void deleteSelectedContacts() {
-        int confirmation = JOptionPane.showConfirmDialog(this, "Are you sure you want to delete the selected contacts?",
-                "Delete Confirmation", JOptionPane.YES_NO_OPTION);
-        if (confirmation == JOptionPane.YES_OPTION) {
-            List<Contact> selectedContacts = contactJList.getSelectedValuesList();
-            for (Contact contact : selectedContacts) {
-                contactList.remove(contact);
-            }
+        if (!phoneExists(phone)) {
+            Contact newContact = new Contact(name, surname, phone, email, address);
+            contactList.add(newContact);
+            sortContacts();
             updateContactListModel();
-            contactDetailsArea.setText("");
-            deleteButton.setEnabled(false);
-            updateButton.setEnabled(false);
+        } else {
+            showError("This phone number already exists.");
         }
     }
 
-    // Update the selected contact
-    private void updateSelectedContact() {
-        Contact selectedContact = contactJList.getSelectedValue();
-        if (selectedContact != null) {
-            String newName = JOptionPane.showInputDialog(this, "Enter new first name:", selectedContact.getFirstName());
-            String newSurname = JOptionPane.showInputDialog(this, "Enter new surname:", selectedContact.getSurname());
-            String newPhone = JOptionPane.showInputDialog(this, "Enter new phone number:", selectedContact.getPhone());
+    // Check if the phone number already exists
+    private boolean phoneExists(String phone) {
+        return contactList.stream().anyMatch(contact -> contact.getPhone().equals(phone));
+    }
 
-            if (newName != null && newSurname != null && newPhone != null) {
-                // Check if the new phone number already exists
-                boolean exists = contactList.stream().anyMatch(contact -> contact.getPhone().equals(newPhone) && !contact.equals(selectedContact));
-                if (!exists) {
-                    selectedContact.setFirstName(newName);
-                    selectedContact.setSurname(newSurname);
-                    selectedContact.setPhone(newPhone);
-                    sortContacts();
-                    updateContactListModel();
-                } else {
-                    JOptionPane.showMessageDialog(this, "Contact with this phone number already exists.", "Error", JOptionPane.ERROR_MESSAGE);
-                }
+    // Insert a new contact via dialog
+    private void insertNewContact() {
+        while (true) { // Loop to allow multiple entries
+            JTextField nameField = new JTextField();
+            JTextField surnameField = new JTextField();
+            JTextField phoneField = new JTextField();
+            JTextField emailField = new JTextField();
+            JTextField addressField = new JTextField();
+
+            Object[] message = {
+                    "First Name:", nameField,
+                    "Surname:", surnameField,
+                    "Phone Number:", phoneField,
+                    "Email:", emailField,
+                    "Address:", addressField
+            };
+
+            int option = JOptionPane.showConfirmDialog(this, message, "Insert New Contact", JOptionPane.OK_CANCEL_OPTION);
+            if (option == JOptionPane.OK_OPTION) {
+                insertContact(nameField.getText(), surnameField.getText(), phoneField.getText(), emailField.getText(), addressField.getText());
+            } else {
+                break; // Exit loop if user cancels
             }
         }
     }
 
-    // Method to update the contact list model
+    // Update the selected contacts via dialog
+    private void updateSelectedContacts() {
+        Contact[] selectedContacts = contactJList.getSelectedValuesList().toArray(new Contact[0]);
+        for (Contact selectedContact : selectedContacts) {
+            JTextField nameField = new JTextField(selectedContact.getFirstName());
+            JTextField surnameField = new JTextField(selectedContact.getSurname());
+            JTextField phoneField = new JTextField(selectedContact.getPhone());
+            JTextField emailField = new JTextField(selectedContact.getEmail());
+            JTextField addressField = new JTextField(selectedContact.getAddress());
+
+            Object[] message = {
+                    "First Name:", nameField,
+                    "Surname:", surnameField,
+                    "Phone Number:", phoneField,
+                    "Email:", emailField,
+                    "Address:", addressField
+            };
+
+            int option = JOptionPane.showConfirmDialog(this, message, "Update Contact", JOptionPane.OK_CANCEL_OPTION);
+            if (option == JOptionPane.OK_OPTION) {
+                String newPhone = phoneField.getText().replaceAll("\\s+", ""); // Remove spaces
+                if (!phoneExists(newPhone) || newPhone.equals(selectedContact.getPhone())) {
+                    selectedContact.setFirstName(nameField.getText());
+                    selectedContact.setSurname(surnameField.getText());
+                    selectedContact.setPhone(newPhone);
+                    selectedContact.setEmail(emailField.getText());
+                    selectedContact.setAddress(addressField.getText());
+                } else {
+                    showError("This phone number already exists.");
+                }
+            }
+        }
+        updateContactListModel();
+    }
+
+    // Delete selected contacts
+    private void deleteContacts() {
+        Contact[] selectedContacts = contactJList.getSelectedValuesList().toArray(new Contact[0]);
+        for (Contact selectedContact : selectedContacts) {
+            contactList.remove(selectedContact);
+        }
+        updateContactListModel();
+    }
+
+    // Update contact list model
     private void updateContactListModel() {
         contactListModel.clear();
         for (Contact contact : contactList) {
@@ -229,22 +227,59 @@ public class ModernPhonebookApp extends JFrame {
         }
     }
 
-    // Method to sort the contacts alphabetically
-    private void sortContacts() {
-        contactList.sort(Comparator.comparing(Contact::getFullName));
-    }
-
-    // Method to search contacts based on the search field
+    // Search contacts based on the search field
     private void searchContacts(String query) {
         contactListModel.clear();
         for (Contact contact : contactList) {
-            if (contact.getFullName().toLowerCase().contains(query.toLowerCase())) {
+            if (contact.getFirstName().toLowerCase().contains(query.toLowerCase()) ||
+                    contact.getSurname().toLowerCase().contains(query.toLowerCase()) ||
+                    contact.getPhone().toLowerCase().contains(query.toLowerCase()) ||
+                    contact.getEmail().toLowerCase().contains(query.toLowerCase())) {
                 contactListModel.addElement(contact);
             }
         }
     }
 
-    // Main method to run the application
+    // Sort contacts alphabetically
+    private void sortContacts() {
+        contactList.sort(Comparator.comparing(Contact::getFirstName));
+    }
+
+    // Show contact details in a dialog
+    private void showContactDetails(Contact contact) {
+        String contactDetails = contact.getFormattedDetails();
+        JOptionPane.showMessageDialog(this, contactDetails, "Contact Details", JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    // Show error dialog
+    private void showError(String message) {
+        JOptionPane.showMessageDialog(this, message, "Error", JOptionPane.ERROR_MESSAGE);
+    }
+
+    // Perform text action
+    private void performText() {
+        Contact selectedContact = contactJList.getSelectedValue();
+        if (selectedContact != null) {
+            JOptionPane.showMessageDialog(this, "Texting " + selectedContact.getPhone() + "...");
+        }
+    }
+
+    // Perform call action
+    private void performCall() {
+        Contact selectedContact = contactJList.getSelectedValue();
+        if (selectedContact != null) {
+            JOptionPane.showMessageDialog(this, "Calling " + selectedContact.getPhone() + "...");
+        }
+    }
+
+    // Perform video call action
+    private void performVideoCall() {
+        Contact selectedContact = contactJList.getSelectedValue();
+        if (selectedContact != null) {
+            JOptionPane.showMessageDialog(this, "Video calling " + selectedContact.getPhone() + "...");
+        }
+    }
+
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
             ModernPhonebookApp app = new ModernPhonebookApp();
@@ -253,52 +288,46 @@ public class ModernPhonebookApp extends JFrame {
     }
 }
 
-// Contact class for storing contact details
+// Contact class to represent a contact in the phonebook
 class Contact {
     private String firstName;
     private String surname;
     private String phone;
+    private String email;
+    private String address;
 
-    public Contact(String firstName, String surname, String phone) {
+    public Contact(String firstName, String surname, String phone, String email, String address) {
         this.firstName = firstName;
         this.surname = surname;
         this.phone = phone;
+        this.email = email;
+        this.address = address;
     }
 
-    public String getFirstName() {
-        return firstName;
-    }
+    // Getters and setters
+    public String getFirstName() { return firstName; }
+    public void setFirstName(String firstName) { this.firstName = firstName; }
 
-    public void setFirstName(String firstName) {
-        this.firstName = firstName;
-    }
+    public String getSurname() { return surname; }
+    public void setSurname(String surname) { this.surname = surname; }
 
-    public String getSurname() {
-        return surname;
-    }
+    public String getPhone() { return phone; }
+    public void setPhone(String phone) { this.phone = phone; }
 
-    public void setSurname(String surname) {
-        this.surname = surname;
-    }
+    public String getEmail() { return email; }
+    public void setEmail(String email) { this.email = email; }
 
-    public String getPhone() {
-        return phone;
-    }
+    public String getAddress() { return address; }
+    public void setAddress(String address) { this.address = address; }
 
-    public void setPhone(String phone) {
-        this.phone = phone;
-    }
-
-    public String getFullName() {
-        return firstName + " " + surname;
-    }
-
+    // Method to return formatted details
     public String getFormattedDetails() {
-        return "Name: " + getFullName() + "\nPhone: " + phone;
+        return String.format("Name: %s %s\nPhone: %s\nEmail: %s\nAddress: %s",
+                firstName, surname, phone, email, address);
     }
 
     @Override
     public String toString() {
-        return getFullName(); // Display the full name in the JList
+        return firstName + " " + surname; // Display name in JList
     }
 }

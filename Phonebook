@@ -347,6 +347,6 @@ class Contact {
 
     @Override
     public String toString() {
-        return firstName + " " + surname + " - " + phone;
+        return firstName + " " + surname;
     }
 }
